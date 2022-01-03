@@ -68,8 +68,8 @@ y1 <- omitNAFLD$NAFLD_status
 set.seed(100)
 cv.l1 <- cv.glmnet(x1,y1,family="binomial",nfolds = 5,alpha=1)
 best_lambda.l1<-cv.l1$lambda.min
-l.mod1<- glmnet(x1,y1,family="binomial",nfolds = 5,alpha=1,lambda = best_lambda.l1)
-coef.l.min1 <- coef(l.mod1, s="lambda.min")
+l.mod1<- glmnet(x1,y1,family="binomial",alpha=1,lambda = best_lambda.l1)
+coef.l.min1 <- coef(l.mod1)
 knitr::kable(as.matrix(coef.l.min1),caption="coefficients of predictors for the optimal lambda value using lasso method")
 feature1 <- rownames(coef.l.min1)[coef.l.min1[,1]!=0][-1]
 feature1
@@ -81,7 +81,7 @@ set.seed(100)
 cv.l2 <- cv.glmnet(x2,y2,family="binomial",nfolds = 5,alpha=1)
 best_lambda.l2<-cv.l2$lambda.min
 l.mod2 <- glmnet(x2,y2,family="binomial", alpha=1,lambda = best_lambda.l2)
-coef.l.min2 <- coef(l.mod2 , s="lambda.min")
+coef.l.min2 <- coef(l.mod2)
 knitr::kable(as.matrix(coef.l.min2),caption="coefficients of predictors for the optimal lambda value using lasso method")
 feature2 <- rownames(coef.l.min2)[coef.l.min2[,1]!=0][-1]
 feature2
