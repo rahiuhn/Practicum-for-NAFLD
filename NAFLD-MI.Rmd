@@ -77,6 +77,8 @@ coef.l.min1 <- coef(cv.l1, s="lambda.min")
 knitr::kable(as.matrix(coef.l.min1),caption="coefficients of predictors for the optimal lambda value using lasso method")
 feature1 <- rownames(coef.l.min1)[coef.l.min1[,1]!=0][-1]
 feature1
+# Running normal LASSO with cv based lambda
+l1 <- glmnet(x1,y1,family="binomial", alpha=1, lambda = best_lambda.l1)
 ```
 
 ```{r}
@@ -92,6 +94,9 @@ coef.l.min2 <- coef(cv.l2, s="lambda.min")
 knitr::kable(as.matrix(coef.l.min2),caption="coefficients of predictors for the optimal lambda value using lasso method")
 feature2 <- rownames(coef.l.min2)[coef.l.min2[,1]!=0][-1]
 feature2
+
+# Running normal LASSO with cv based lambda
+l1 <- glmnet(x2,y2,family="binomial", alpha=1, lambda = best_lambda.l2)
 ```
 
 
