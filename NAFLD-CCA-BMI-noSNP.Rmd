@@ -1,0 +1,357 @@
+---
+title: "NAFLD-CCA-BMI-noSNP"
+author: "Yun Zhu"
+date: "11/01/2022"
+output: pdf_document
+---
+
+---
+title: "NAFLD-CCA-BMI"
+author: "Yun Zhu"
+date: "11/01/2022"
+output: pdf_document
+---
+
+This document is for doing PS omit missing data.
+```{r setup, include=FALSE}
+library(tidyverse)
+library(MatchIt)
+library(twang)
+library(glmnet)
+library(ggplot2)
+library(dplyr)
+library(lsr)
+library(survey)
+library(rbounds)
+library(naniar)
+library(tableone)
+library(optmatch)
+library(mice)
+library(plotmo)
+library(corrplot)
+library(ggplot2)
+library(ggcorrplot)
+library(MatchThem)
+```
+
+```{r warning=FALSE}
+setwd("/Users/Crystal/Desktop/Practicum/Data")
+NAFLD <-read_csv("data_NAFLD_PS.csv",show_col_types = FALSE)
+NAFLD<-NAFLD %>%mutate(rs1260326_T=factor(rs1260326_T, levels = 0:2)) %>% 
+  mutate(rs1044498_C=factor(rs1044498_C, levels = 0:2)) %>% 
+  mutate(rs58542926_T=factor(rs58542926_T, levels = 0:2)) %>% 
+  mutate(rs738409_G=factor(rs738409_G, levels = 0:2)) %>% 
+  mutate(rs3480_G=factor(rs3480_G, levels = 0:2)) %>% 
+  mutate(rs780094_T=factor(rs780094_T, levels = 0:2)) %>% 
+  mutate(rs4374383_A=factor(rs4374383_A, levels = 0:2)) %>% 
+  mutate(rs72613567_TA=factor(rs72613567_TA, levels = 0:2)) %>% 
+  mutate(rs62305723_A=factor(rs62305723_A, levels = 0:2)) %>% 
+  mutate(rs4880_A=factor(rs4880_A, levels = 0:2))%>% 
+  mutate(rs3750861_T=factor(rs3750861_T, levels = 0:2))%>% 
+  mutate(rs236918_C=factor(rs236918_C, levels = 0:2))%>% 
+  mutate(rs12979860_T=factor(rs12979860_T, levels = 0:2))%>%
+  mutate(Smoking_status_2=as.factor(ifelse(Smoking_status_2=="Never", 0, 
+                         ifelse(Smoking_status_2=="Previous" | Smoking_status_2=="Current", 1, NA)))) %>%
+  mutate(Alcohol_drinker_status_2=as.factor(ifelse(Alcohol_drinker_status_2=="Never", 0, 
+                                  ifelse(Alcohol_drinker_status_2=="Previous" |Alcohol_drinker_status_2== "Current", 1, NA)))) %>%
+  mutate(BMIdich=as.numeric(ifelse(BMIdich=="<25", 0, 1))) %>%
+  mutate(Sex=as.factor(ifelse(Sex=="Male", 0, 1)))
+variables<-c("Sex","Age","LDL","Glucose","Triglycerides","Glycated_haemoglobin__HbA1c_","HDL_cholesterol","Waist_circumference","Disastolic_Blood_pressure_automa","Systolic_Blood_Pressure","Visceral_adipose_tissue_volume__","White_blood_cell__leukocyte__cou","Red_blood_cell__erythrocyte__cou","Albumin","Alanine_aminotransferase","Cholesterol","Creatinine","Urate","Vitamin_D","Smoking_status_2","Alcohol_drinker_status_2","T2D" )
+```
+
+```{r,warning=FALSE}
+## show the percentage of missing data
+gg_miss_var(NAFLD[variables], show_pct = TRUE)
+```
+```{r}
+##############################################
+############ CCA #################
+##############################################
+omitNAFLD<- na.omit(NAFLD)
+```
+
+```{r}
+df_numeric <- dplyr::select_if(omitNAFLD[variables], is.numeric)
+NAFLD.cor = cor(df_numeric)
+ggcorrplot(NAFLD.cor)
+# cholesterol and LDL have strong correlation,"Visceral_adipose_tissue_volume__" and "Waist_circumference" have strong correlation
+```
+
+```{r}
+out.formula1 <- as.formula((paste("NAFLD_status","~ ",paste(variables,collapse = "+"))))
+out.formula2 <- as.formula((paste("BMIdich","~ ",paste(variables,collapse = "+"))))
+```
+
+```{r}
+##Using lasso to figure out the predictors that both effect the BMIdich and NAFLD status
+x1<-model.matrix(out.formula1,omitNAFLD)[,-1]
+y1 <- omitNAFLD$NAFLD_status
+set.seed(100)
+cv.l1 <- cv.glmnet(x1,y1,family="binomial",nfolds = 5,alpha=1)
+best_lambda.l1<-cv.l1$lambda.min
+l.mod1<- glmnet(x1,y1,family="binomial",alpha=1,lambda = best_lambda.l1)
+coef.l.min1 <- coef(l.mod1)
+knitr::kable(as.matrix(coef.l.min1),caption="coefficients of predictors for the optimal lambda value using lasso method")
+feature1 <- rownames(coef.l.min1)[coef.l.min1[,1]!=0][-1]
+feature1
+```
+```{r}
+x2<-model.matrix(out.formula2,omitNAFLD)[,-1]
+y2 <- omitNAFLD$BMIdich
+set.seed(100)
+cv.l2 <- cv.glmnet(x2,y2,family="binomial",nfolds = 5,alpha=1)
+best_lambda.l2<-cv.l2$lambda.min
+l.mod2 <- glmnet(x2,y2,family="binomial", alpha=1,lambda = best_lambda.l2)
+coef.l.min2 <- coef(l.mod2 )
+knitr::kable(as.matrix(coef.l.min2),caption="coefficients of predictors for the optimal lambda value using lasso method")
+feature2 <- rownames(coef.l.min2)[coef.l.min2[,1]!=0][-1]
+feature2
+```
+
+```{r}
+newvariables <- c("Sex","Age","Glucose","Glycated_haemoglobin__HbA1c_","HDL_cholesterol","Waist_circumference","Disastolic_Blood_pressure_automa","Systolic_Blood_Pressure","Visceral_adipose_tissue_volume__","White_blood_cell__leukocyte__cou", "Albumin","Alanine_aminotransferase","Creatinine","Urate","Alcohol_drinker_status_2","T2D" )
+tab1e<-CreateTableOne(vars=newvariables,data=omitNAFLD,strata="BMIdich")
+print(tab1e,smd=T)
+```
+
+
+```{r}
+ps.formula <- as.formula((paste("BMIdich ~",paste(newvariables,collapse = "+"))))
+param<-matchit(ps.formula,data = omitNAFLD)
+omitNAFLD$param_ps<-param$distance
+set.seed(123456)
+nonparam<-ps(as.formula((paste("BMIdich ~",paste(newvariables,collapse = "+")))),
+                  data = as.data.frame(omitNAFLD),n.trees=1000,interaction.depth=9,shrinkage=0.01,
+                  stop.method="es.mean",estimand="ATT")
+omitNAFLD$nonparam_ps<-nonparam$ps$es.mean
+summary(nonparam$gbm.obj)
+```
+
+```{r}
+ggplot(data = omitNAFLD,aes(param_ps,fill=factor(BMIdich)))+
+  geom_histogram(binwidth = 0.005,alpha = 0.5,position="identity")
+
+```
+```{r}
+omitNAFLD <- omitNAFLD %>% mutate(quintile = ntile(param_ps, 5))
+d <- rep(NA, 5)
+for (i in 1:5) {
+  dat_q <- omitNAFLD[omitNAFLD$quintile == i,]
+  d[i] <- cohensD(param_ps ~ BMIdich, data = dat_q)
+  }
+d
+
+```
+
+```{r}
+logitPS<-sd(-log(1/omitNAFLD$param_ps-1))
+## Greedy matching
+
+greedy<-matchit(ps.formula,data=omitNAFLD,
+                distance="logit",
+                caliper=0.1*sd(logitPS),
+                method="nearest")
+greedy$nn <-c(3082,2354)
+
+
+## Optimal matching
+optimal <- matchit(ps.formula,data= omitNAFLD,
+                distance="logit",
+                   method = "optimal")
+optimal$nn <- c(3082,2354)
+
+
+## 1:2 matching
+one_two <- matchit(ps.formula,data=omitNAFLD,
+                distance="logit",
+                caliper=0.1*sd(logitPS),
+                   method = "nearest", ratio = 2)
+one_two$nn <- c(3082,2354)
+
+## Full matching
+full <- matchit(ps.formula,data=omitNAFLD,
+                distance="logit",
+                caliper=0.1*sd(logitPS),
+                method = "full")
+full$nn <- c(3082,3082)
+matching.t<-matrix(c(greedy$nn,optimal$nn,one_two$nn,full$nn), ncol=2, byrow=TRUE)
+rownames(matching.t)<-c("Greedy matching","Optimal matching","1:2 matching","Full matching")
+colnames(matching.t)<-c("Original Gourps","Matched Gourps")
+knitr::kable(as.table(matching.t))
+```
+
+```{r}
+## Subclassification
+omitNAFLD <- omitNAFLD %>% mutate(subclass = ntile(param_ps, 5))
+
+
+## Subclassification with full matching
+subc <- matchit(ps.formula, data = omitNAFLD,
+                method = "subclass",
+                subclass = 5)
+subc.t<-matrix(c(3082, 3082), ncol=2, byrow=TRUE)
+colnames(subc.t)<-c("Original Gourps","Matched Gourps")
+rownames(subc.t)<-"Subclasses"
+knitr::kable(as.table(subc.t))
+plot(subc, type = "jitter")
+```
+
+```{r}
+### Weighting
+
+## Odds
+omitNAFLD$odds <- ifelse(omitNAFLD$BMIdich == 1, 1, omitNAFLD$param_ps/(1-omitNAFLD$param_ps))
+
+## IPTW with stabilization
+omitNAFLD$iptw<- ifelse(omitNAFLD$BMIdich == 1, (mean(omitNAFLD$param_ps))/omitNAFLD$param_ps, (mean(1-omitNAFLD$param_ps))/(1-omitNAFLD$param_ps))
+```
+
+```{r}
+## Calculate standardized difference in the covariates
+
+# Greedy matching
+summary(greedy, standardize = TRUE)
+
+# Optimal matching
+summary(optimal, standardize = TRUE)
+
+# 1:2 matching
+summary(one_two, standardized = TRUE)
+
+# Full matching
+summary(full, standardize = TRUE)
+
+# Subclassification with full matching
+summary(subc, standardize=TRUE)
+```
+```{r}
+# Weighting by odds
+odds <- dx.wts(omitNAFLD$odds, data = as.data.frame(omitNAFLD), var = newvariables, treat.var="BMIdich", 
+               estimand = "ATT")
+bal.table(odds)
+
+# Weighting by IPTW with stabilization
+iptw <- dx.wts(omitNAFLD$iptw, data = as.data.frame(omitNAFLD), var = newvariables, treat.var="BMIdich", 
+               estimand = "ATE")
+bal.table(iptw)
+```
+
+```{r}
+## Create Q-Q plots
+
+# Greedy matching
+plot(greedy)
+
+# Optimal matching
+plot(optimal)
+
+# 1:2 matching
+plot(one_two)
+
+# Full matching
+plot(full)
+
+# Subclassification with full matching
+plot(subc)
+```
+
+```{r}
+## Create density plots
+
+# Full matching
+matched_full <- match.data(full, subclass = "block")
+ggplot(data = matched_full, aes(LDL, fill = factor(BMIdich)), weight = weights) + geom_density(alpha = 0.5, position = "identity")
+ggplot(data = matched_full, aes(Waist_circumference, fill = factor(BMIdich)), weight = weights) + geom_density(alpha = 0.5, position = "identity")
+
+# Weighting by odds
+ggplot(data = omitNAFLD, aes(LDL, fill = factor(BMIdich)), weight = odds) + geom_density(alpha = 0.5, position = "identity")
+ggplot(data = omitNAFLD, aes(Waist_circumference, fill = factor(BMIdich)), weight = odds) + geom_density(alpha = 0.5, position = "identity")
+
+# Weighting by IPTW with stabilization
+ggplot(data = omitNAFLD, aes(LDL, fill = factor(BMIdich)), weight = iptw) + geom_density(alpha = 0.5, position = "identity")
+ggplot(data = omitNAFLD, aes(Waist_circumference, fill = factor(BMIdich)), weight = iptw) + geom_density(alpha = 0.5, position = "identity")
+
+```
+
+```{r}
+# NAFLD_status~BMIdich
+formula1<-as.formula((paste("NAFLD_status","~ BMIdich + ",paste(newvariables,collapse = "+"))))
+## Greedy matching
+matched_greedy <- match.data(greedy,subclass = "block")
+glm_NAFLD_greedy <- glm(formula1,
+                          data = matched_greedy,
+                          family = binomial)
+summary_greedy <- summary(glm_NAFLD_greedy)
+exp(coef(glm_NAFLD_greedy))
+
+
+## Optimal matching
+matched_optimal <- match.data(optimal,subclass = "block")
+glm_NAFLD_optimal <- glm(formula1,
+                           data = matched_optimal,
+                           family = binomial)
+summary_optimal <- summary(glm_NAFLD_optimal)
+exp(coef(glm_NAFLD_optimal))
+
+
+## 1:2 matching
+matched_one_two <- match.data(one_two,subclass = "block")
+glm_NAFLD_one_two <- glm(formula1, 
+                           data = matched_one_two,
+                           family = binomial)
+summary_one_two <- summary(glm_NAFLD_one_two)
+exp(coef(glm_NAFLD_one_two))
+
+
+## Full matching
+matched_full <- match.data(full,subclass = "block")
+glm_NAFLD_full <- glm(formula1,
+                        data = matched_full,
+                        family = binomial, weights = weights)
+summary_full <-summary(glm_NAFLD_full)
+exp(coef(glm_NAFLD_full))
+
+
+## Subclassification with full matching
+subced <- match.data(subc,subclass = "block")
+design <- svydesign(id = ~1, strata = ~subclass, weights = ~weights, nested = TRUE, data = subced)
+svyglm_NAFLD_subc <- svyglm(formula1, design = design, family = binomial)
+summary_subc <- summary(svyglm_NAFLD_subc)
+exp(coef(svyglm_NAFLD_subc))
+
+
+## Weighting by the odds
+glm_NAFLD_odds <- glm(formula1, 
+                        data = omitNAFLD,
+                        weights = odds,
+                        family = binomial)
+summary_odds <-summary(glm_NAFLD_odds)
+exp(coef(glm_NAFLD_odds))
+
+
+## Weighting by IPTW with stabilization
+glm_NAFLD_iptw <- glm(formula1,
+                        data = omitNAFLD,
+                        weights = iptw,
+                        family = binomial)
+summary_iptw <-summary(glm_NAFLD_iptw)
+exp(coef(glm_NAFLD_iptw))
+```
+
+```{r}
+knitr::kable(summary_greedy$coefficients,digits = 3,caption = "summary table of greedy matching for BMI")
+knitr::kable(summary_optimal$coefficients,digits = 3,caption = "summary table of optimal matching for BMI")
+knitr::kable(summary_one_two$coefficients,digits = 3,caption = "summary table of 1:2 matching for BMI")
+knitr::kable(summary_full$coefficients,digits = 3,caption = "summary table of full matching for BMI")
+knitr::kable(summary_subc$coefficients,digits = 3,caption = "summary table of subclassification for BMI")
+knitr::kable(summary_odds$coefficients,digits = 3,caption = "summary table of weighting by odds for BMI")
+knitr::kable(summary_iptw$coefficients,digits = 3,caption = "summary table of weighting by iptw for BMI")
+```
+
+
+```{r,fig.cap="Results of a sensitivity analysis: Having a new conviction."}
+matched_optimal <- match.data(optimal,subclass = "block")
+mytable <- table(matched_optimal$BMIdich, matched_optimal$NAFLD_status)
+binarysens(mytable[1, 2], mytable[2, 1], Gamma = 6, GammaInc = 1)
+```
+
