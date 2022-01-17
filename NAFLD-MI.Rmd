@@ -1,0 +1,199 @@
+---
+title: "MI"
+author: "Yun Zhu"
+date: "09/11/2021"
+output: pdf_document
+---
+This document is for doing PS omit missing data.
+```{r setup, include=FALSE}
+library(tidyverse)
+library(MatchIt)
+library(MatchThem)
+library(twang)
+library(ggplot2)
+library(dplyr)
+library(lsr)
+library(survey)
+library(rbounds)
+library(naniar)
+library(tableone)
+library(optmatch)
+library(mice)
+```
+
+```{r warning=FALSE}
+setwd("/Users/Crystal/Desktop/Practicum/Data")
+NAFLD <-read_csv("data_NAFLD_PS.csv",show_col_types = FALSE)
+NAFLD<-NAFLD %>%mutate(rs1260326_T=as.numeric(rs1260326_T, levels = 0:2)) %>% 
+  mutate(rs1044498_C=as.numeric(rs1044498_C, levels = 0:2)) %>% 
+  mutate(rs58542926_T=as.numeric(rs58542926_T, levels = 0:2)) %>% 
+  mutate(rs738409_G=as.numeric(rs738409_G, levels = 0:2)) %>% 
+  mutate(rs3480_G=as.numeric(rs3480_G, levels = 0:2)) %>% 
+  mutate(rs780094_T=as.numeric(rs780094_T, levels = 0:2)) %>% 
+  mutate(rs4374383_A=as.numeric(rs4374383_A, levels = 0:2)) %>% 
+  mutate(rs72613567_TA=as.numeric(rs72613567_TA, levels = 0:2)) %>% 
+  mutate(rs62305723_A=as.numeric(rs62305723_A, levels = 0:2)) %>% 
+  mutate(rs4880_A=as.numeric(rs4880_A, levels = 0:2))%>% 
+  mutate(rs3750861_T=as.numeric(rs3750861_T, levels = 0:2))%>% 
+  mutate(rs236918_C=as.numeric(rs236918_C, levels = 0:2))%>% 
+  mutate(rs12979860_T=as.numeric(rs12979860_T, levels = 0:2))%>%
+  mutate(Smoking_status_2=as.factor(ifelse(Smoking_status_2=="Never", 0, 
+                         ifelse(Smoking_status_2=="Previous" | Smoking_status_2=="Current", 1, NA)))) %>%
+  mutate(Alcohol_drinker_status_2=as.factor(ifelse(Alcohol_drinker_status_2=="Never", 0, 
+                                  ifelse(Alcohol_drinker_status_2=="Previous" |Alcohol_drinker_status_2== "Current", 1, NA)))) %>%
+  mutate(BMIdich=as.factor(ifelse(BMIdich=="<25", 0, 1))) %>%
+  mutate(Sex=as.factor(ifelse(Sex=="Male", 0, 1)))
+variables<-c("Sex","Age","LDL","Glucose","Triglycerides","Glycated_haemoglobin__HbA1c_","HDL_cholesterol","Waist_circumference","Disastolic_Blood_pressure_automa","Systolic_Blood_Pressure","Visceral_adipose_tissue_volume__","White_blood_cell__leukocyte__cou","Red_blood_cell__erythrocyte__cou","Albumin","Alanine_aminotransferase","Cholesterol","Creatinine","Urate","Vitamin_D","Smoking_status_2","Alcohol_drinker_status_2","BMIdich","rs1260326_T","rs1044498_C","rs58542926_T","rs738409_G","rs3480_G","rs780094_T","rs4374383_A","rs72613567_TA","rs62305723_A","rs4880_A","rs3750861_T","rs236918_C","rs12979860_T" )
+```
+
+```{r}
+##############################################
+############ MI #################
+##############################################
+#Impute the data with 10 imputations (more is better)
+mi.data<-mice(NAFLD, m = 5, method = "cart")
+```
+
+```{r}
+out.formula1 <- as.formula((paste("NAFLD_status","~ ",paste(variables,collapse = "+"))))
+out.formula2 <- as.formula((paste("T2D","~ ",paste(variables,collapse = "+"))))
+```
+
+```{r}
+##Using lasso to figure out the predictors that both effect the T2D adn NAFLD status
+x1<-model.matrix(out.formula1, mi.data)[,-1]
+y1 <- mi.data$NAFLD_status
+set.seed(100)
+cv.l1 <- cv.glmnet(x1,y1,family="binomial",nfolds = 5,alpha=1)
+best_lambda.l1<-cv.l1$lambda.min
+l.mod1<- glmnet(x1,y1,family="binomial",alpha=1,lambda = best_lambda.l1)
+coef.l.min1 <- coef(l.mod1)
+knitr::kable(as.matrix(coef.l.min1),caption="coefficients of predictors for the optimal lambda value using lasso method")
+feature1 <- rownames(coef.l.min1)[coef.l.min1[,1]!=0][-1]
+feature1
+```
+
+```{r}
+x2<-model.matrix(out.formula2,c.data)[,-1]
+y2 <- c.data$T2D
+set.seed(100)
+cv.l2 <- cv.glmnet(x2,y2,family="binomial",nfolds = 5,alpha=1)
+best_lambda.l2<-cv.l2$lambda.min
+l.mod2 <- glmnet(x2,y2,family="binomial", alpha=1,lambda = best_lambda.l2)
+coef.l.min2 <- coef(l.mod2 )
+knitr::kable(as.matrix(coef.l.min2),caption="coefficients of predictors for the optimal lambda value using lasso method")
+feature2 <- rownames(coef.l.min2)[coef.l.min2[,1]!=0][-1]
+feature2
+```
+
+```{r}
+## remove glucose because it is directly related to t2d
+newvariables <- c("Sex","Age","Glycated_haemoglobin__HbA1c_","Waist_circumference","Disastolic_Blood_pressure_automa","Albumin","Alanine_aminotransferase","Vitamin_D","Smoking_status_2","Alcohol_drinker_status_2","rs3480_G","rs12979860_T")
+tab1e<-CreateTableOne(vars=newvariables,data=omitNAFLD,strata="T2D")
+print(tab1e,smd=T)
+```
+
+```{r}
+ps.formula <- as.formula((paste("T2D ~",paste(newvariables,collapse = "+"))))
+
+greedy.matched.datasets <- matchthem(ps.formula, mi.data,
+                          approach = 'within',
+                          method = 'nearest',
+                          caliper = 0.05)
+optimal.matched.datasets <- matchthem(ps.formula, mi.data,
+                          approach = 'within',
+                          method = 'optimal',
+                          caliper = 0.05)
+one_two.matched.datasets <- matchthem(ps.formula, mi.data,
+                          approach = 'within',
+                          method = 'nearest',
+                          caliper = 0.05, ratio = 2)
+full.matched.datasets <- matchit(ps.formula,mi.data,
+                                 approach = 'within',
+                                 caliper = 0.05,
+                                 method = "full")
+weighted.datasets <- weightthem(ps.formula, mi.data,
+                                approach = 'across', 
+                                method = 'ps', estimand = 'ATM')
+```
+
+```{r}
+param<-matchit(ps.formula,data = c.data)
+c.data$param_ps<-param$distance
+set.seed(123456)
+nonparam<-ps(as.formula((paste("T2D ~ ",paste(newvariables,collapse = "+")))),
+                  data = as.data.frame(c.data),n.trees=1000,interaction.depth=9,shrinkage=0.01,
+                  stop.method="es.mean",estimand="ATT")
+c.data$nonparam_ps<-nonparam$ps$es.mean
+summary(nonparam$gbm.obj)
+ggplot(data = c.data,aes(param_ps,fill=factor(T2D)))+
+  geom_histogram(binwidth = 0.005,alpha = 0.5,position="identity")
+
+```
+```{r}
+c.data<- omitNAFLD %>% mutate(quintile = ntile(param_ps, 5))
+d <- rep(NA, 5)
+for (i in 1:5) {
+  dat_q <- c.data[c.data$quintile == i,]
+  d[i] <- cohensD(param_ps ~ T2D, data = dat_q)
+  }
+d
+
+```
+
+```{r}
+logitPS<-sd(-log(1/c.data$param_ps-1))
+## Greedy matching
+
+greedy<-matchit(ps.formula,data=c.data,
+                distance="logit",
+                caliper=0.1*sd(logitPS),
+                method="nearest")
+greedy$nn
+
+
+## Optimal matching
+optimal <- matchit(ps.formula,data= c.data,
+                distance="logit",
+                   method = "optimal")
+optimal$nn
+
+
+## 1:2 matching
+one_two <- matchit(ps.formula,data=c.data,
+                distance="logit",
+                caliper=0.1*sd(logitPS),
+                   method = "nearest", ratio = 2)
+one_two$nn
+
+## Full matching
+full <- matchit(ps.formula,data=c.data,
+                distance="logit",
+                caliper=0.1*sd(logitPS),
+                method = "full")
+full$nn
+knitr::kables(list(knitr::kable(greedy$nn,caption = "Greedy matching"),knitr::kable(optimal$nn,caption = "Optimal matching"),knitr::kable(one_two$nn,caption = "1:2 matching"),knitr::kable(full$nn,caption = "Full matching")))
+```
+
+```{r}
+## Subclassification
+c.data <- c.data %>% mutate(subclass = ntile(param_ps, 5))
+
+
+## Subclassification with full matching
+subc <- matchit(ps.formula, data = c.data,
+                method = "subclass",
+                subclass = 5)
+knitr::kable(subc$nn,caption = "subclasses")
+plot(subc, type = "jitter")
+```
+
+```{r}
+### Weighting
+
+## Odds
+c.data$odds <- ifelse(c.data$T2D == 1, 1, c.data$param_ps/(1-c.data$param_ps))
+
+## IPTW with stabilization
+c.data$iptw<- ifelse(c.data$T2D == 1, (mean(c.data$param_ps))/c.data$param_ps, (mean(1-c.data$param_ps))/(1-c.data$param_ps))
+```
