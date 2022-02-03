@@ -105,7 +105,7 @@ res = lapply(1:boot_rep, function(seed) {
 
   # Run LASSO
   X_cont = model.matrix(out.formula2,traindf)[,-1]
-  Y_cont = traindf$NAFLD_status
+  Y_cont = traindf$NAFLD_status # Please check this variable, is it NAFLD_status or BMI?
 
   # Find best lambda
   cvfit_cont = glmnet::cv.glmnet(x= X_cont, y = Y_cont, family="binomial", 
