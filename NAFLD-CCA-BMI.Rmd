@@ -68,7 +68,7 @@ out.formula2 <- as.formula((paste("BMIdich","~ ",paste(variables,collapse = "+")
 
 ```{r}
 # Perform Boot straps with LASSO
-boot_rep = 5
+boot_rep = 500
 res = lapply(1:boot_rep, function(seed) {
   set.seed(seed)
   bootrows = sample(1:nrow(omitNAFLD), nrow(omitNAFLD), replace = T)
@@ -99,7 +99,7 @@ res = lapply(1:boot_rep, function(seed) {
 
 ```{r}
 # Perform Boot straps with LASSO
-boot_rep = 5
+boot_rep = 500
 res = lapply(1:boot_rep, function(seed) {
   set.seed(seed)
   bootrows = sample(1:nrow(omitNAFLD), nrow(omitNAFLD), replace = T)
