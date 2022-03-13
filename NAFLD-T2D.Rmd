@@ -27,15 +27,20 @@ library(ggcorrplot)
 library(MatchThem)
 library(gtsummary)
 library(rstatix)
+library(future.apply)
+library(parallel)
 ```
 
 ```{r warning=FALSE}
 setwd("/Users/Crystal/Desktop/Practicum/Data")
 NAFLD <-read_csv("data_NAFLD_PS.csv",show_col_types = FALSE)
 NAFLD<-NAFLD %>%mutate(Sex=as.factor(ifelse(Sex=="Male", 0, 1)))
+NAFLDtotal<-NAFLD[,c(1:27,41)]
 NAFLD<-NAFLD[,c(3:4,7,8,10:12,14,27,41)]
 variables<-c("Sex","LDL","Triglycerides","Glycated_haemoglobin__HbA1c_",
              "HDL_cholesterol","Waist_circumference","Systolic_Blood_Pressure","BMIdich")
+omitNAFLDtotal<-na.omit(NAFLDtotal)
+omitNAFLD<- na.omit(NAFLD)
 ```
 
 ```{r,warning=FALSE}
@@ -43,9 +48,6 @@ variables<-c("Sex","LDL","Triglycerides","Glycated_haemoglobin__HbA1c_",
 gg_miss_var(NAFLD[variables], show_pct = TRUE)
 ```
 ```{r}
-##############################################
-############ CCA #################
-##############################################
 tbl_summary(NAFLD)
 table1.1 <- 
   tbl_summary(
@@ -80,7 +82,6 @@ table1.3
 ```
 
 ```{r}
-omitNAFLD<- na.omit(NAFLD)
 tbl_summary(omitNAFLD)
 table2.1 <- 
   tbl_summary(
@@ -149,6 +150,14 @@ summary(glm(out.formula1, data = omitNAFLD))
 summary(glm(out.formula2, data = omitNAFLD))
 ```
 
+```{r}
+summary_glm<-summary(glm(NAFLD_status~T2D,data = omitNAFLD))
+knitr::kable(summary(glm(NAFLD_status~T2D,data = NAFLDtotal))$coef,digits=3, caption = "Summary table of original NAFLD data")
+knitr::kable(summary(glm(NAFLD_status~T2D,data = omitNAFLDtotal))$coef,digits=3, caption = "Summary table of omit original NAFLD data")
+knitr::kable(summary(glm(NAFLD_status~T2D,data = NAFLD))$coef,digits=3, caption = "Summary table of adjusted NAFLD data")
+knitr::kable(summary_glm$coef,digits=3, caption = "Summary table of omit adjusted NAFLD data")
+
+```
 
 ```{r}
 # Normal LASSO
@@ -180,9 +189,9 @@ feature2
 # Perform Boot straps with LASSO
 boot_rep = 500 # Number of Boot straps
 Feature.NAFLD<-data.frame(feature=variables)
-for(i in 1:boot_rep ) {
+res = lapply(1:boot_rep, function(seed) {
   # Generate Bootstrap rows
-  set.seed(i)
+  set.seed(seed)
   bootrows = sample(1:nrow(omitNAFLD), nrow(omitNAFLD), replace = T)
   splitdf = omitNAFLD[bootrows,]
   
@@ -202,23 +211,22 @@ for(i in 1:boot_rep ) {
   fit_cont = glmnet::glmnet(x= X_cont, y = Y_cont, family="binomial", alpha = 1, 
                             standardize = F, lambda = lambda)
   coef.l.min1 <- coef(fit_cont)[-1]
-  Feature.NAFLD[i+1]<-coef.l.min1
-}
+  Feature.NAFLD[seed+1]<<-coef.l.min1
+})
+
 for (j in 1:boot_rep+1) {
   Feature.NAFLD[j]<-ifelse(Feature.NAFLD[j]== 0, 0, 1)
   }
 Feature.NAFLD$total = rowSums(Feature.NAFLD[-1])
-print(Feature.NAFLD$feature[Feature.NAFLD$total>0.7*boot_rep])
+print(Feature.NAFLD$feature[Feature.NAFLD$total>0.8*boot_rep])
 ## Variables related to NAFLD: Triglycerides","HDL_cholesterol","Waist_circumference",    "Systolic_Blood_Pressure"  
-```
 
-```{r}
 # Perform Boot straps with LASSO
 boot_rep = 500 # Number of Boot straps
 Feature.T2D <-data.frame(feature=variables)
-for(i in 1:boot_rep ) {
+res = lapply(1:boot_rep, function(seed) {
   # Generate Bootstrap rows
-  set.seed(i)
+  set.seed(seed)
   bootrows = sample(1:nrow(omitNAFLD), nrow(omitNAFLD), replace = T)
   splitdf = omitNAFLD[bootrows,]
   # Bootstrapped data
@@ -238,23 +246,27 @@ for(i in 1:boot_rep ) {
   fit_cont = glmnet::glmnet(x= X_cont, y = Y_cont, family="binomial", alpha = 1, 
                             standardize = F, lambda = lambda)
   coef.l.min1 <- coef(fit_cont)[-1]
-  Feature.T2D[i+1]<-coef.l.min1
-}
+  Feature.T2D[seed+1]<<-coef.l.min1
+})
+
 for (j in 1:boot_rep+1) {
   Feature.T2D[j]<-ifelse(Feature.T2D[j]== 0, 0, 1)
   }
 Feature.T2D$total = rowSums(Feature.T2D[-1])
-print(Feature.T2D$feature[Feature.T2D$total>0.7*boot_rep])
+print(Feature.T2D$feature[Feature.T2D$total>0.8*boot_rep])
 ## Variables related to T2D:"Glycated_haemoglobin__HbA1c_","Waist_circumference" 
 ```
+
 ```{r}
-# Perform Boot straps with LASSO contain interaction
+# Perform Boot straps with LASSO contain interaction for NAFLD
 boot_rep = 500 # Number of Boot straps
-sum.NAFLD<-summary(glm(out.formula3, data = omitNAFLD))
+sum.NAFLD<-summary(glm(NAFLD_status~.*., , family="binomial",data = omitNAFLD[,!names(omitNAFLD) %in% "T2D"]))
 Feature.NAFLD.interaction<-data.frame(feature=rownames(coef(sum.NAFLD))[-1])
-for(i in 1:boot_rep ) {
+# PARALLEL RUN
+plan(multisession(workers = 8))
+res = lapply(1:boot_rep, function(seed) {
   # Generate Bootstrap rows
-  set.seed(i)
+  set.seed(seed)
   bootrows = sample(1:nrow(omitNAFLD), nrow(omitNAFLD), replace = T)
   splitdf = omitNAFLD[bootrows,]
   
@@ -263,7 +275,7 @@ for(i in 1:boot_rep ) {
 
   # Run LASSO with no covariate control: Continuous Outcome
   ## Convert dataframe into matrix
-  X_cont = scale(model.matrix(out.formula3,traindf)[,-1])
+  X_cont = scale(model.matrix(NAFLD_status~.*.,traindf[,!names(traindf) %in% "T2D"])[,-1])
   Y_cont = traindf$NAFLD_status
   # Find best lambda
   cvfit_cont = glmnet::cv.glmnet(x= X_cont, y = Y_cont,nfolds = 5, family="binomial", 
@@ -274,24 +286,26 @@ for(i in 1:boot_rep ) {
   fit_cont = glmnet::glmnet(x= X_cont, y = Y_cont, family="binomial", alpha = 1, 
                             standardize = F, lambda = lambda)
   coef.l.min1 <- coef(fit_cont)[-1]
-  Feature.NAFLD.interaction[i+1]<-coef.l.min1
-}
+  Feature.NAFLD.interaction[seed+1]<<-coef.l.min1
+})
+
 for (j in 1:boot_rep+1) {
   Feature.NAFLD.interaction[j]<-ifelse(Feature.NAFLD.interaction[j]== 0, 0, 1)
   }
 Feature.NAFLD.interaction$total = rowSums(Feature.NAFLD.interaction[-1])
-print(Feature.NAFLD.interaction$feature[Feature.NAFLD.interaction$total>0.8*boot_rep])
-## Variables related to NAFLD: "Triglycerides","HDL_cholesterol","Waist_circumference"
-```
+print(Feature.NAFLD.interaction$feature[Feature.NAFLD.interaction$total>0.7*boot_rep])
+## Variables related to NAFLD: "Triglycerides","HDL_cholesterol",  "Waist_circumference", "Sex1:Triglycerides" 
 
-```{r}
+# Perform Boot straps with LASSO contain interaction for t2d
 boot_rep = 500 # Number of Boot straps
-sum.T2D<-summary(glm(out.formula4, data = omitNAFLD))
-Feature.T2D.interaction<-data.frame(feature=rownames(coef(sum.T2D))[-1])
+sum.T2D <- summary(glm(T2D~.*.,data =omitNAFLD[,!names(omitNAFLD) %in% "NAFLD_status"], family="binomial"))
 
-for(i in 1:boot_rep ) {
+Feature.T2D.interaction<-data.frame(feature=rownames(coef(sum.T2D))[-1])
+# PARALLEL RUN
+plan(multisession(workers = 8))
+res = lapply(1:boot_rep, function(seed) {
   # Generate Bootstrap rows
-  set.seed(i)
+  set.seed(seed)
   bootrows = sample(1:nrow(omitNAFLD), nrow(omitNAFLD), replace = T)
   splitdf = omitNAFLD[bootrows,]
   # Bootstrapped data
@@ -299,7 +313,7 @@ for(i in 1:boot_rep ) {
 
   # Run LASSO with no covariate control: Continuous Outcome
   ## Convert dataframe into matrix
-  X_cont = scale(model.matrix(out.formula4,traindf)[,-1])
+  X_cont = scale(model.matrix(T2D~.*.,traindf[,!names(traindf) %in% "NAFLD_status"])[,-1])
   Y_cont = traindf$T2D
 
   # Find best lambda
@@ -311,67 +325,19 @@ for(i in 1:boot_rep ) {
   fit_cont = glmnet::glmnet(x= X_cont, y = Y_cont, family="binomial", alpha = 1, 
                             standardize = F, lambda = lambda)
   coef.l.min1 <- coef(fit_cont)[-1]
-  Feature.T2D.interaction[i+1]<-coef.l.min1
-}
+  Feature.T2D.interaction[seed+1]<<-coef.l.min1
+})
+
 for (j in 1:boot_rep+1) {
   Feature.T2D.interaction[j]<-ifelse(Feature.T2D.interaction[j]== 0, 0, 1)
   }
 Feature.T2D.interaction$total = rowSums(Feature.T2D.interaction[-1])
-print(Feature.T2D.interaction$feature[Feature.T2D.interaction$total>0.8*boot_rep])
-## Variables related to T2D: "Glycated_haemoglobin__HbA1c_","Glycated_haemoglobin__HbA1c_:Waist_circumference" ,"Glycated_haemoglobin__HbA1c_:Waist_circumference:Systolic_Blood_Pressure"
+print(Feature.T2D.interaction$feature[Feature.T2D.interaction$total>0.7*boot_rep])
+## Variables related to T2D: "Glycated_haemoglobin__HbA1c_","Glycated_haemoglobin__HbA1c_:Waist_circumference" ,"Glycated_haemoglobin__HbA1c_:Systolic_Blood_Pressure"
 ```
 
 ```{r}
-NAFLD.omit.status<-subset (omitNAFLD, select = -T2D)
-NAFLD.omit.t2d<-subset (omitNAFLD, select = -NAFLD_status)
-# Perform boot straps and feature sampling for LASSO
-boot_rep = 500 # Number of Boot straps
-numpred = 8 # Total number of predictors or independent variables used in the model.
-outvar = "NAFLD_status" # name of the outcoem feature or variable
-fakename = paste("X", 1:numpred, sep = "") # Create fakenames of input features/predictors to avoid coding issue due to special characters.
-oriname = names(NAFLD.omit.status)[!names(NAFLD.omit.status) %in% outvar] # Original feature names
-
-## Prepare the Models
-res = lapply(1:boot_rep, function(seed) {
-  # Generate Bootstrap rows
-  set.seed(seed)
-  bootrows = sample(1:nrow(NAFLD.omit.status), nrow(NAFLD.omit.status), replace = T)
-  splitdf = NAFLD.omit.status[bootrows,]
-  
-  # Generate Feature sample
-  featname = names(NAFLD.omit.status)[!names(NAFLD.omit.status) %in% outvar]# Get the names of all input features. "y" is used because it is the outcome variable. Hence it should not be selected.
-  set.seed(seed)
-  featnum = sample(2:numpred, 1, replace = F)
-  set.seed(seed)
-  selfeat = sample(featname, featnum, replace = F)
-  
-  # Bootstrapped data
-  traindf = splitdf[, c(selfeat, outvar)]
-  
-  # Run LASSO with no covariate control: Continuous Outcome
-  ## Convert dataframe into matrix
-  X_cont = model.matrix(out.formula3,traindf)[,-1]
-  Y_cont = traindf$NAFLD_status
-  
-  # Find best lambda
-  cvfit_cont = glmnet::cv.glmnet(x= X_cont, y = Y_cont, nfolds = 5,family="binomial", alpha = 1, standardize = F)
-  cvfit_cont
-  plot(cvfit_cont)
-  lambda = cvfit_cont$lambda.1se
-  
-  ## Run Lasso
-  fit_cont = glmnet::glmnet(x= X_cont, y = Y_cont,nfolds = 5,family="binomial", alpha = 1, standardize = F, lambda = lambda)
-  fit_cont
-  # ## View selected features and coefficients
-  # coef_cont = coefextract(model = fit_cont)
-  # p <- ggplot(coef_cont[-1,], aes(x = variable, y = coefficient))+
-  #   geom_bar(stat = "identity")+
-  #   scale_y_continuous(limits = c(-0.5,1))+
-  #   theme_bw()
-  # p
-  # print(p)
-})
-
+# Functions for performing boot straps and feature sampling for LASSO
 ## Create a matrix of features for each model
 var_organise = function (inputlist, symbol = "_") {
   org_var = lapply(inputlist, function(x) {
@@ -404,15 +370,123 @@ perflistcreator = function(model_list = fitlist){
   resrank2 = res
   return(res)
 }
-freqdf = perflistcreator(model_list = res)
+```
 
+```{r warning=FALSE}
+# Perform boot straps and feature sampling for LASSO
+boot_rep = 500 # Number of Boot straps
+numpred = 8 # Total number of predictors or independent variables used in the model.
+
+## Prepare the Models
+res = lapply(1:boot_rep, function(seed) {
+  # Generate Bootstrap rows
+  set.seed(seed)
+  bootrows = sample(1:nrow(omitNAFLD), nrow(omitNAFLD), replace = T)
+  splitdf = omitNAFLD[bootrows,]
+  # Generate Feature sample
+  featname = names(omitNAFLD)[!names(omitNAFLD) %in% c("NAFLD_status","T2D")]# Get the names of all input features. "y" is used because it is the outcome variable. Hence it should not be selected.
+  set.seed(seed)
+  featnum = sample(2:numpred, 1, replace = F)
+  set.seed(seed)
+  selfeat = sample(featname, featnum, replace = F)
+  
+  # Bootstrapped data
+  traindf = splitdf[, c(selfeat, "NAFLD_status")]
+  # Run LASSO with no covariate control: Continuous Outcome
+  ## Convert dataframe into matrix
+  X_cont = model.matrix(NAFLD_status~.,traindf[,!names(traindf) %in% "T2D"])[,-1]
+  Y_cont = traindf$NAFLD_status
+  
+  # Find best lambda
+  cvfit_cont = glmnet::cv.glmnet(x= X_cont, y = Y_cont, nfolds = 5,family="binomial", alpha = 1, standardize = F)
+  lambda = cvfit_cont$lambda.1se
+  
+  ## Run Lasso
+  fit_cont = glmnet::glmnet(x= X_cont, y = Y_cont,nfolds = 5,family="binomial", alpha = 1, standardize = F, lambda = lambda)
+  # ## View selected features and coefficients
+  # coef_cont = coefextract(model = fit_cont)
+  # p <- ggplot(coef_cont[-1,], aes(x = variable, y = coefficient))+
+  #   geom_bar(stat = "identity")+
+  #   scale_y_continuous(limits = c(-0.5,1))+
+  #   theme_bw()
+  # p
+  # print(p)
+})
+
+freqdf = perflistcreator(model_list = res)
 ## Calculate frequency
 freq = colSums(freqdf, na.rm = T)/ sapply(freqdf, function(x) length(x[!is.na(x)]))
-freq_clean = round(freq*100,2) # Gives frequency in percent and rounding off to two digits
-## Replace fakenames with original names
-names(freq_clean) = names(fakename[as.numeric(stringi::stri_replace_all_fixed(names(freq_clean), "X",""))])
+freqdf = as.data.frame(t(freqdf))
+freqdf = freqdf %>% mutate(freq=c(t(freq)),feature=rownames(freqdf))
+print(freqdf$feature[freqdf$freq>0.7])
 
+## Variables related to NAFLD_status: "Glycated_haemoglobin__HbA1c_","Systolic_Blood_Pressure","Triglycerides","Waist_circumference"          
 ```
+
+```{r warning=FALSE}
+boot_rep = 500 # Number of Boot straps
+numpred = 8 # Total number of predictors or independent variables used in the model.
+
+## Prepare the Models
+res = lapply(1:boot_rep, function(seed) {
+  # Generate Bootstrap rows
+  set.seed(seed)
+  bootrows = sample(1:nrow(omitNAFLD), nrow(omitNAFLD), replace = T)
+  splitdf = omitNAFLD[bootrows,]
+  # Generate Feature sample
+  featname = names(omitNAFLD)[!names(omitNAFLD) %in% c("NAFLD_status","T2D")]# Get the names of all input features. "y" is used because it is the outcome variable. Hence it should not be selected.
+  set.seed(seed)
+  featnum = sample(2:numpred, 1, replace = F)
+  set.seed(seed)
+  selfeat = sample(featname, featnum, replace = F)
+  
+  # Bootstrapped data
+  traindf = splitdf[, c(selfeat, "T2D")]
+  # Run LASSO with no covariate control: Continuous Outcome
+  ## Convert dataframe into matrix
+  X_cont = model.matrix(T2D~.,traindf[,!names(traindf) %in% "NAFLD_status"])[,-1]
+  Y_cont = traindf$T2D
+  
+  # Find best lambda
+  cvfit_cont = glmnet::cv.glmnet(x= X_cont, y = Y_cont, nfolds = 5,family="binomial", alpha = 1, standardize = F)
+  lambda = cvfit_cont$lambda.1se
+  
+  ## Run Lasso
+  fit_cont = glmnet::glmnet(x= X_cont, y = Y_cont,nfolds = 5,family="binomial", alpha = 1, standardize = F, lambda = lambda)
+  # ## View selected features and coefficients
+  # coef_cont = coefextract(model = fit_cont)
+  # p <- ggplot(coef_cont[-1,], aes(x = variable, y = coefficient))+
+  #   geom_bar(stat = "identity")+
+  #   scale_y_continuous(limits = c(-0.5,1))+
+  #   theme_bw()
+  # p
+  # print(p)
+})
+
+## Create a matrix of features for each model
+
+freqdf = perflistcreator(model_list = res)
+## Calculate frequency
+freq = colSums(freqdf, na.rm = T)/ sapply(freqdf, function(x) length(x[!is.na(x)]))
+freqdf = as.data.frame(t(freqdf))
+freqdf = freqdf %>% mutate(freq=c(t(freq)),feature=rownames(freqdf))
+print(freqdf$feature[freqdf$freq>0.7])
+
+## Variables related to T2D:"Glycated_haemoglobin__HbA1c_"  "Systolic_Blood_Pressure" "Waist_circumference"
+```
+```{r}
+## Variables related to NAFLD_status:"Glycated_haemoglobin__HbA1c_.Systolic_Blood_Pressure",
+##"Glycated_haemoglobin__HbA1c_.Waist_circumference","Systolic_Blood_Pressure.Glycated_haemoglobin__HbA1c_",
+##"Systolic_Blood_Pressure.Triglycerides","Systolic_Blood_Pressure.Waist_circumference",
+##"Waist_circumference.Glycated_haemoglobin__HbA1c_","Waist_circumference.Systolic_Blood_Pressure" 
+
+## Variables related to T2D:"Glycated_haemoglobin__HbA1c_.Systolic_Blood_Pressure",
+##"Glycated_haemoglobin__HbA1c_.Waist_circumference","Systolic_Blood_Pressure.Glycated_haemoglobin__HbA1c_",
+##"Waist_circumference.Glycated_haemoglobin__HbA1c_" 
+variables.sample.bootstrap<-c("Glycated_haemoglobin__HbA1c_", "Waist_circumference")
+variables.sample.bootstrap.interaction<-c("Glycated_haemoglobin__HbA1c_.Systolic_Blood_Pressure","Glycated_haemoglobin__HbA1c_.Waist_circumference","Systolic_Blood_Pressure.Glycated_haemoglobin__HbA1c_","Waist_circumference.Glycated_haemoglobin__HbA1c_")
+```
+
 
 ```{r}
 newvariables.normal<-c("LDL","Triglycerides","Glycated_haemoglobin__HbA1c_","Waist_circumference","Systolic_Blood_Pressure","BMIdich")
@@ -422,6 +496,9 @@ print(tab1e,smd=T)
 ```
 
 ```{r}
+##############################################
+############ CCA #################
+##############################################
 ps.formula <- as.formula((paste("T2D ~",paste(newvariables,collapse = "+"))))
 param<-matchit(ps.formula,data = omitNAFLD)
 omitNAFLD$param_ps<-param$distance
@@ -431,9 +508,7 @@ nonparam<-ps(as.formula((paste("T2D ~ ",paste(newvariables,collapse = "+")))),
                   stop.method="es.mean",estimand="ATT")
 omitNAFLD$nonparam_ps<-nonparam$ps$es.mean
 summary(nonparam$gbm.obj)
-```
 
-```{r}
 ggplot(data = omitNAFLD,aes(param_ps,fill=factor(T2D)))+
   geom_histogram(binwidth = 0.005,alpha = 0.5,position="identity")
 ```
@@ -532,7 +607,6 @@ summary(subc, standardize=TRUE)
 iptw <- dx.wts(omitNAFLD$iptw, data = as.data.frame(omitNAFLD), var = newvariables, treat.var="T2D", 
                estimand = "ATE")
 ```
-
 
 
 ```{r}
@@ -649,6 +723,13 @@ NAFLD.T2D.se[6]<-summary_iptw$coefficients[2,2]
 NAFLD.T2D.pvalue[6]<-summary_iptw$coefficients[2,4]
 NAFLD.T2D.lowerCI[6]<- exp(summary_iptw$coefficients[2,1]-1.96*summary_iptw$coefficients[2,2])
 NAFLD.T2D.upperCI[6]<- exp(summary_iptw$coefficients[2,1]+1.96*summary_iptw$coefficients[2,2])
+
+NAFLD.T2D.HR.est[7] <-exp(summary_glm$coefficients[2,1])
+NAFLD.T2D.logHR.est[7]<-summary_glm$coefficients[2,1]
+NAFLD.T2D.se[7]<-summary_glm$coefficients[2,2]
+NAFLD.T2D.pvalue[7]<-summary_glm$coefficients[2,4]
+NAFLD.T2D.lowerCI[7]<- exp(summary_glm$coefficients[2,1]-1.96*summary_glm$coefficients[2,2])
+NAFLD.T2D.upperCI[7]<- exp(summary_glm$coefficients[2,1]+1.96*summary_glm$coefficients[2,2])
 ```
 
 ```{r}
@@ -661,7 +742,7 @@ NAFLDoutcome.T2D.result <-
     row.names = c(NA, -8L), 
     class = "data.frame")
 
-A <- cbind2(c("","Method","Greedy Matching","Optimal Matching","1:2 Matching","Full Matching","Subclassification", "IPTW"),
+A <- cbind2(c("","Method","Greedy Matching","Optimal Matching","1:2 Matching","Full Matching","Subclassification", "IPTW","GLM"),
                c("","Effect", as.character(round(NAFLD.T2D.HR.est,3))))
 B<- cbind2(c("","SE", as.character(round(NAFLD.T2D.se,3))),
            c("","p-value", ifelse(NAFLD.T2D.pvalue<0.001, "<0.001", round(NAFLD.T2D.pvalue,3))))
@@ -690,6 +771,7 @@ grid.text("Exposure of T2D on NAFLD", .5, 0.98, gp=gpar(fontface="bold"))
 #Impute the data with 5 imputations (more is better)
 mi.data<-mice(NAFLD, m = 5)
 c.data<-complete(mi.data)
+summary_glm_mi<-summary(glm(NAFLD_status~T2D,data = c.data))
 ```
 
 ```{r}
@@ -868,6 +950,13 @@ NAFLD.T2D.MIte.se[6]<-summary_MIte_iptw[2,3]
 NAFLD.T2D.MIte.pvalue[6]<-summary_MIte_iptw[2,6]
 NAFLD.T2D.MIte.lowerCI[6]<- exp(summary_MIte_iptw[2,7])
 NAFLD.T2D.MIte.upperCI[6]<- exp(summary_MIte_iptw[2,8])
+
+NAFLD.T2D.MIte.HR.est[7] <-exp(summary_glm_mi$coefficients[2,1])
+NAFLD.T2D.MIte.logHR.est[7]<-summary_glm_mi$coefficients[2,1]
+NAFLD.T2D.MIte.se[7]<-summary_glm_mi$coefficients[2,2]
+NAFLD.T2D.MIte.pvalue[7]<-summary_glm_mi$coefficients[2,4]
+NAFLD.T2D.MIte.lowerCI[7]<- exp(summary_glm_mi$coefficients[2,1]-1.96*summary_glm_mi$coefficients[2,2])
+NAFLD.T2D.MIte.upperCI[7]<- exp(summary_glm_mi$coefficients[2,1]+1.96*summary_glm_mi$coefficients[2,2])
 ```
 
 ```{r}
@@ -880,7 +969,7 @@ NAFLDoutcome.T2D.MIte.result <-
     row.names = c(NA, -8L), 
     class = "data.frame")
 
-A <- cbind2(c("","Method","Greedy Matching","Optimal Matching","1:2 Matching","Full Matching","Subclassification", "IPTW"),
+A <- cbind2(c("","Method","Greedy Matching","Optimal Matching","1:2 Matching","Full Matching","Subclassification", "IPTW","GLM"),
                c("","Effect", as.character(round(NAFLD.T2D.MIte.HR.est,3))))
 B<- cbind2(c("","SE", as.character(round(NAFLD.T2D.MIte.se,3))),
            c("","p-value", ifelse(NAFLD.T2D.MIte.pvalue<0.001, "<0.001", round(NAFLD.T2D.MIte.pvalue,3))))
@@ -1035,6 +1124,13 @@ NAFLD.T2D.MIps.se[6]<-summary_MIps_iptw[2,3]
 NAFLD.T2D.MIps.pvalue[6]<-summary_MIps_iptw[2,6]
 NAFLD.T2D.MIps.lowerCI[6]<- exp(summary_MIps_iptw[2,7])
 NAFLD.T2D.MIps.upperCI[6]<- exp(summary_MIps_iptw[2,8])
+
+NAFLD.T2D.MIps.HR.est[7] <-exp(summary_glm_mi$coefficients[2,1])
+NAFLD.T2D.MIps.logHR.est[7]<-summary_glm_mi$coefficients[2,1]
+NAFLD.T2D.MIps.se[7]<-summary_glm_mi$coefficients[2,2]
+NAFLD.T2D.MIps.pvalue[7]<-summary_glm_mi$coefficients[2,4]
+NAFLD.T2D.MIps.lowerCI[7]<- exp(summary_glm_mi$coefficients[2,1]-1.96*summary_glm_mi$coefficients[2,2])
+NAFLD.T2D.MIps.upperCI[7]<- exp(summary_glm_mi$coefficients[2,1]+1.96*summary_glm_mi$coefficients[2,2])
 ```
 
 ```{r}
@@ -1048,7 +1144,7 @@ NAFLDoutcome.T2D.MIps.result <-
     row.names = c(NA, -8L), 
     class = "data.frame")
 
-tabletext <- cbind(c("","Method","Greedy Matching","Optimal Matching","1:2 Matching","Full Matching","Subclassification", "IPTW"), c("","Effect", as.character(round(NAFLD.T2D.MIps.HR.est,3))), c("","SE", as.character(round(NAFLD.T2D.MIps.se,3))),c("","p-value", ifelse(NAFLD.T2D.MIps.pvalue<0.001, "<0.001", round(NAFLD.T2D.MIps.pvalue,3))))
+tabletext <- cbind(c("","Method","Greedy Matching","Optimal Matching","1:2 Matching","Full Matching","Subclassification", "IPTW","GLM"), c("","Effect", as.character(round(NAFLD.T2D.MIps.HR.est,3))), c("","SE", as.character(round(NAFLD.T2D.MIps.se,3))),c("","p-value", ifelse(NAFLD.T2D.MIps.pvalue<0.001, "<0.001", round(NAFLD.T2D.MIps.pvalue,3))))
                    
 forestplot(tabletext, 
            NAFLDoutcome.T2D.result,new_page = TRUE,
@@ -1068,7 +1164,7 @@ grid.text("Exposure of T2D on NAFLD by MIps", .5, 0.98, gp=gpar(fontface="bold")
 
 
 ```{r}
-NAFLD.T2D<-data.frame(method=c(rep("CCA",6),rep("MIte",6),rep("MIps",6)),PSmethod=c(rep(c("Greedy Matching","Optimal Matching","1:2 Matching","Full Matching","Subclassification", "IPTW"),3)),est=c(round(NAFLD.T2D.HR.est,3),round(NAFLD.T2D.MIte.HR.est,3),round(NAFLD.T2D.MIps.HR.est,3)),log.est=c(round(NAFLD.T2D.logHR.est,3),round(NAFLD.T2D.MIte.logHR.est,3),round(NAFLD.T2D.MIps.logHR.est,3)),se=c(round(NAFLD.T2D.se,3),round(NAFLD.T2D.MIte.se,3),round(NAFLD.T2D.MIps.se,3)),pvalue=c(round(NAFLD.T2D.pvalue,3),round(NAFLD.T2D.MIte.pvalue,3),round(NAFLD.T2D.MIps.pvalue,3)),lowerCI=c(round(NAFLD.T2D.lowerCI,3),round(NAFLD.T2D.MIte.lowerCI,3),round(NAFLD.T2D.MIps.lowerCI,3)),upperCI=c(round(NAFLD.T2D.upperCI,3),round(NAFLD.T2D.MIte.upperCI,3),round(NAFLD.T2D.MIps.upperCI,3)))
+NAFLD.T2D<-data.frame(method=c(rep("CCA",7),rep("MIte",7),rep("MIps",7)),PSmethod=c(rep(c("Greedy Matching","Optimal Matching","1:2 Matching","Full Matching","Subclassification", "IPTW","GLM"),3)),est=c(round(NAFLD.T2D.HR.est,3),round(NAFLD.T2D.MIte.HR.est,3),round(NAFLD.T2D.MIps.HR.est,3)),log.est=c(round(NAFLD.T2D.logHR.est,3),round(NAFLD.T2D.MIte.logHR.est,3),round(NAFLD.T2D.MIps.logHR.est,3)),se=c(round(NAFLD.T2D.se,3),round(NAFLD.T2D.MIte.se,3),round(NAFLD.T2D.MIps.se,3)),pvalue=c(round(NAFLD.T2D.pvalue,3),round(NAFLD.T2D.MIte.pvalue,3),round(NAFLD.T2D.MIps.pvalue,3)),lowerCI=c(round(NAFLD.T2D.lowerCI,3),round(NAFLD.T2D.MIte.lowerCI,3),round(NAFLD.T2D.MIps.lowerCI,3)),upperCI=c(round(NAFLD.T2D.upperCI,3),round(NAFLD.T2D.MIte.upperCI,3),round(NAFLD.T2D.MIps.upperCI,3)))
 
 NAFLD.T2D.greedy<-subset(NAFLD.T2D,PSmethod=="Greedy Matching")
 NAFLD.T2D.optimal<-subset(NAFLD.T2D,PSmethod=="Optimal Matching")

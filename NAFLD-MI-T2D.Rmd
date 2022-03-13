@@ -20,6 +20,7 @@ library(tableone)
 library(optmatch)
 library(mice)
 library(forestplot)
+library(gtsummary)
 ```
 
 ```{r warning=FALSE}
@@ -37,10 +38,41 @@ variables<-c("Sex","LDL","Triglycerides","Glycated_haemoglobin__HbA1c_","HDL_cho
 ##############################################
 #Impute the data with 5 imputations (more is better)
 mi.data<-mice(NAFLD, m = 5)
-```
-```{r}
-m=5
 c.data<-complete(mi.data)
+```
+
+```{r}
+tbl_summary(c.data)
+table3.1 <- 
+  tbl_summary(
+    c.data,
+    by = NAFLD_status # split table by group
+  ) %>%
+  add_n() %>% # add column with total number of non-missing observations
+  add_p() %>% # test for a difference between groups
+  modify_header(label = "**Variable**") %>% # update the column header
+  bold_labels() 
+table3.1
+table3.2 <- 
+  tbl_summary(
+    c.data,
+    by = T2D # split table by group
+  ) %>%
+  add_n() %>% # add column with total number of non-missing observations
+  add_p() %>% # test for a difference between groups
+  modify_header(label = "**Variable**") %>% # update the column header
+  bold_labels() 
+table3.2
+table3.3 <- 
+  tbl_summary(
+    c.data,
+    by = BMIdich # split table by group
+  ) %>%
+  add_n() %>% # add column with total number of non-missing observations
+  add_p() %>% # test for a difference between groups
+  modify_header(label = "**Variable**") %>% # update the column header
+  bold_labels() 
+table3.3
 ```
 
 ```{r}
@@ -51,7 +83,7 @@ out.formula2 <- as.formula((paste("T2D","~ ",paste(variables,collapse = "+"))))
 
 ```{r}
 ## remove glucose because it is directly related to t2d
-newvariables <- c("Glycated_haemoglobin__HbA1c_","Waist_circumference", "Systolic_Blood_Pressure" )
+newvariables <- c("Glycated_haemoglobin__HbA1c_","Waist_circumference")
 ```
 
 ```{r}
@@ -164,70 +196,70 @@ knitr::kable(summary_iptw,digits = 3,caption = "summary table of weighting by ip
 ```
 
 ```{r}
-NAFLD.T2D.HR.est<-c()
-NAFLD.T2D.logHR.est<-c()
-NAFLD.T2D.se<-c()
-NAFLD.T2D.pvalue<-c()
-NAFLD.T2D.lowerCI<-c()
-NAFLD.T2D.upperCI<-c()
+NAFLD.T2D.MIte.HR.est<-c()
+NAFLD.T2D.MIte.logHR.est<-c()
+NAFLD.T2D.MIte.se<-c()
+NAFLD.T2D.MIte.pvalue<-c()
+NAFLD.T2D.MIte.lowerCI<-c()
+NAFLD.T2D.MIte.upperCI<-c()
 
-NAFLD.T2D.HR.est[1] <-exp(summary_greedy[2,2])
-NAFLD.T2D.logHR.est[1]<-summary_greedy[2,2]
-NAFLD.T2D.se[1]<-summary_greedy[2,3]
-NAFLD.T2D.pvalue[1]<-summary_greedy[2,6]
-NAFLD.T2D.lowerCI[1]<- exp(summary_greedy[2,7])
-NAFLD.T2D.upperCI[1]<- exp(summary_greedy[2,8])
+NAFLD.T2D.MIte.HR.est[1] <-exp(summary_greedy[2,2])
+NAFLD.T2D.MIte.logHR.est[1]<-summary_greedy[2,2]
+NAFLD.T2D.MIte.se[1]<-summary_greedy[2,3]
+NAFLD.T2D.MIte.pvalue[1]<-summary_greedy[2,6]
+NAFLD.T2D.MIte.lowerCI[1]<- exp(summary_greedy[2,7])
+NAFLD.T2D.MIte.upperCI[1]<- exp(summary_greedy[2,8])
 
-NAFLD.T2D.HR.est[2] <-exp(summary_optimal[2,2])
-NAFLD.T2D.logHR.est[2]<-summary_optimal[2,2]
-NAFLD.T2D.se[2]<-summary_optimal[2,3]
-NAFLD.T2D.pvalue[2]<-summary_optimal[2,6]
-NAFLD.T2D.lowerCI[2]<- exp(summary_optimal[2,7])
-NAFLD.T2D.upperCI[2]<- exp(summary_optimal[2,8])
+NAFLD.T2D.MIte.HR.est[2] <-exp(summary_optimal[2,2])
+NAFLD.T2D.MIte.logHR.est[2]<-summary_optimal[2,2]
+NAFLD.T2D.MIte.se[2]<-summary_optimal[2,3]
+NAFLD.T2D.MIte.pvalue[2]<-summary_optimal[2,6]
+NAFLD.T2D.MIte.lowerCI[2]<- exp(summary_optimal[2,7])
+NAFLD.T2D.MIte.upperCI[2]<- exp(summary_optimal[2,8])
 
-NAFLD.T2D.HR.est[3] <-exp(summary_one_two[2,2])
-NAFLD.T2D.logHR.est[3]<-summary_one_two[2,2]
-NAFLD.T2D.se[3]<-summary_one_two[2,3]
-NAFLD.T2D.pvalue[3]<-summary_one_two[2,6]
-NAFLD.T2D.lowerCI[3]<- exp(summary_one_two[2,7])
-NAFLD.T2D.upperCI[3]<- exp(summary_one_two[2,8])
+NAFLD.T2D.MIte.HR.est[3] <-exp(summary_one_two[2,2])
+NAFLD.T2D.MIte.logHR.est[3]<-summary_one_two[2,2]
+NAFLD.T2D.MIte.se[3]<-summary_one_two[2,3]
+NAFLD.T2D.MIte.pvalue[3]<-summary_one_two[2,6]
+NAFLD.T2D.MIte.lowerCI[3]<- exp(summary_one_two[2,7])
+NAFLD.T2D.MIte.upperCI[3]<- exp(summary_one_two[2,8])
 
-NAFLD.T2D.HR.est[4] <-exp(summary_full[2,2])
-NAFLD.T2D.logHR.est[4]<-summary_full[2,2]
-NAFLD.T2D.se[4]<-summary_full[2,3]
-NAFLD.T2D.pvalue[4]<-summary_full[2,6]
-NAFLD.T2D.lowerCI[4]<- exp(summary_full[2,7])
-NAFLD.T2D.upperCI[4]<- exp(summary_full[2,8])
+NAFLD.T2D.MIte.HR.est[4] <-exp(summary_full[2,2])
+NAFLD.T2D.MIte.logHR.est[4]<-summary_full[2,2]
+NAFLD.T2D.MIte.se[4]<-summary_full[2,3]
+NAFLD.T2D.MIte.pvalue[4]<-summary_full[2,6]
+NAFLD.T2D.MIte.lowerCI[4]<- exp(summary_full[2,7])
+NAFLD.T2D.MIte.upperCI[4]<- exp(summary_full[2,8])
 
-NAFLD.T2D.HR.est[5] <-exp(summary_subc[2,2])
-NAFLD.T2D.logHR.est[5]<-summary_subc[2,2]
-NAFLD.T2D.se[5]<-summary_subc[2,3]
-NAFLD.T2D.pvalue[5]<-summary_subc[2,6]
-NAFLD.T2D.lowerCI[5]<- exp(summary_subc[2,7])
-NAFLD.T2D.upperCI[5]<- exp(summary_subc[2,8])
+NAFLD.T2D.MIte.HR.est[5] <-exp(summary_subc[2,2])
+NAFLD.T2D.MIte.logHR.est[5]<-summary_subc[2,2]
+NAFLD.T2D.MIte.se[5]<-summary_subc[2,3]
+NAFLD.T2D.MIte.pvalue[5]<-summary_subc[2,6]
+NAFLD.T2D.MIte.lowerCI[5]<- exp(summary_subc[2,7])
+NAFLD.T2D.MIte.upperCI[5]<- exp(summary_subc[2,8])
 
-NAFLD.T2D.HR.est[6] <-exp(summary_iptw[2,2])
-NAFLD.T2D.logHR.est[6]<-summary_iptw[2,2]
-NAFLD.T2D.se[6]<-summary_iptw[2,3]
-NAFLD.T2D.pvalue[6]<-summary_iptw[2,6]
-NAFLD.T2D.lowerCI[6]<- exp(summary_iptw[2,7])
-NAFLD.T2D.upperCI[6]<- exp(summary_iptw[2,8])
+NAFLD.T2D.MIte.HR.est[6] <-exp(summary_iptw[2,2])
+NAFLD.T2D.MIte.logHR.est[6]<-summary_iptw[2,2]
+NAFLD.T2D.MIte.se[6]<-summary_iptw[2,3]
+NAFLD.T2D.MIte.pvalue[6]<-summary_iptw[2,6]
+NAFLD.T2D.MIte.lowerCI[6]<- exp(summary_iptw[2,7])
+NAFLD.T2D.MIte.upperCI[6]<- exp(summary_iptw[2,8])
 ```
 
 ```{r}
 NAFLDoutcome.T2D.result <- 
   structure(list(
-    mean  = c(NA, NA, NAFLD.T2D.HR.est), 
-    lower = c(NA, NA, NAFLD.T2D.lowerCI),
-    upper = c(NA, NA, NAFLD.T2D.upperCI)),
+    mean  = c(NA, NA, NAFLD.T2D.MIte.HR.est), 
+    lower = c(NA, NA, NAFLD.T2D.MIte.lowerCI),
+    upper = c(NA, NA, NAFLD.T2D.MIte.upperCI)),
     .Names = c("mean", "lower", "upper"), 
     row.names = c(NA, -8L), 
     class = "data.frame")
 
 A <- cbind2(c("","Method","Greedy Matching","Optimal Matching","1:2 Matching","Full Matching","Subclassification", "IPTW"),
-               c("","Effect", as.character(round(NAFLD.T2D.HR.est,3))))
-B<- cbind2(c("","SE", as.character(round(NAFLD.T2D.se,3))),
-           c("","p-value", ifelse(NAFLD.T2D.pvalue<0.001, "<0.001", round(NAFLD.T2D.pvalue,3))))
+               c("","Effect", as.character(round(NAFLD.T2D.MIte.HR.est,3))))
+B<- cbind2(c("","SE", as.character(round(NAFLD.T2D.MIte.se,3))),
+           c("","p-value", ifelse(NAFLD.T2D.MIte.pvalue<0.001, "<0.001", round(NAFLD.T2D.MIte.pvalue,3))))
 tabletext <- cbind2(A ,B)
 
 forestplot(tabletext, 
@@ -339,70 +371,70 @@ knitr::kable(summary_iptw,digits = 3,caption = "summary table of weighting by ip
 ```
 
 ```{r}
-NAFLD.T2D.HR.est<-c()
-NAFLD.T2D.logHR.est<-c()
-NAFLD.T2D.se<-c()
-NAFLD.T2D.pvalue<-c()
-NAFLD.T2D.lowerCI<-c()
-NAFLD.T2D.upperCI<-c()
+NAFLD.T2D.MIps.HR.est<-c()
+NAFLD.T2D.MIps.logHR.est<-c()
+NAFLD.T2D.MIps.se<-c()
+NAFLD.T2D.MIps.pvalue<-c()
+NAFLD.T2D.MIps.lowerCI<-c()
+NAFLD.T2D.MIps.upperCI<-c()
 
-NAFLD.T2D.HR.est[1] <-exp(summary_greedy[2,2])
-NAFLD.T2D.logHR.est[1]<-summary_greedy[2,2]
-NAFLD.T2D.se[1]<-summary_greedy[2,3]
-NAFLD.T2D.pvalue[1]<-summary_greedy[2,6]
-NAFLD.T2D.lowerCI[1]<- exp(summary_greedy[2,7])
-NAFLD.T2D.upperCI[1]<- exp(summary_greedy[2,8])
+NAFLD.T2D.MIps.HR.est[1] <-exp(summary_greedy[2,2])
+NAFLD.T2D.MIps.logHR.est[1]<-summary_greedy[2,2]
+NAFLD.T2D.MIps.se[1]<-summary_greedy[2,3]
+NAFLD.T2D.MIps.pvalue[1]<-summary_greedy[2,6]
+NAFLD.T2D.MIps.lowerCI[1]<- exp(summary_greedy[2,7])
+NAFLD.T2D.MIps.upperCI[1]<- exp(summary_greedy[2,8])
 
-NAFLD.T2D.HR.est[2] <-exp(summary_optimal[2,2])
-NAFLD.T2D.logHR.est[2]<-summary_optimal[2,2]
-NAFLD.T2D.se[2]<-summary_optimal[2,3]
-NAFLD.T2D.pvalue[2]<-summary_optimal[2,6]
-NAFLD.T2D.lowerCI[2]<- exp(summary_optimal[2,7])
-NAFLD.T2D.upperCI[2]<- exp(summary_optimal[2,8])
+NAFLD.T2D.MIps.HR.est[2] <-exp(summary_optimal[2,2])
+NAFLD.T2D.MIps.logHR.est[2]<-summary_optimal[2,2]
+NAFLD.T2D.MIps.se[2]<-summary_optimal[2,3]
+NAFLD.T2D.MIps.pvalue[2]<-summary_optimal[2,6]
+NAFLD.T2D.MIps.lowerCI[2]<- exp(summary_optimal[2,7])
+NAFLD.T2D.MIps.upperCI[2]<- exp(summary_optimal[2,8])
 
-NAFLD.T2D.HR.est[3] <-exp(summary_one_two[2,2])
-NAFLD.T2D.logHR.est[3]<-summary_one_two[2,2]
-NAFLD.T2D.se[3]<-summary_one_two[2,3]
-NAFLD.T2D.pvalue[3]<-summary_one_two[2,6]
-NAFLD.T2D.lowerCI[3]<- exp(summary_one_two[2,7])
-NAFLD.T2D.upperCI[3]<- exp(summary_one_two[2,8])
+NAFLD.T2D.MIps.HR.est[3] <-exp(summary_one_two[2,2])
+NAFLD.T2D.MIps.logHR.est[3]<-summary_one_two[2,2]
+NAFLD.T2D.MIps.se[3]<-summary_one_two[2,3]
+NAFLD.T2D.MIps.pvalue[3]<-summary_one_two[2,6]
+NAFLD.T2D.MIps.lowerCI[3]<- exp(summary_one_two[2,7])
+NAFLD.T2D.MIps.upperCI[3]<- exp(summary_one_two[2,8])
 
-NAFLD.T2D.HR.est[4] <-exp(summary_full[2,2])
-NAFLD.T2D.logHR.est[4]<-summary_full[2,2]
-NAFLD.T2D.se[4]<-summary_full[2,3]
-NAFLD.T2D.pvalue[4]<-summary_full[2,6]
-NAFLD.T2D.lowerCI[4]<- exp(summary_full[2,7])
-NAFLD.T2D.upperCI[4]<- exp(summary_full[2,8])
+NAFLD.T2D.MIps.HR.est[4] <-exp(summary_full[2,2])
+NAFLD.T2D.MIps.logHR.est[4]<-summary_full[2,2]
+NAFLD.T2D.MIps.se[4]<-summary_full[2,3]
+NAFLD.T2D.MIps.pvalue[4]<-summary_full[2,6]
+NAFLD.T2D.MIps.lowerCI[4]<- exp(summary_full[2,7])
+NAFLD.T2D.MIps.upperCI[4]<- exp(summary_full[2,8])
 
-NAFLD.T2D.HR.est[5] <-exp(summary_subc[2,2])
-NAFLD.T2D.logHR.est[5]<-summary_subc[2,2]
-NAFLD.T2D.se[5]<-summary_subc[2,3]
-NAFLD.T2D.pvalue[5]<-summary_subc[2,6]
-NAFLD.T2D.lowerCI[5]<- exp(summary_subc[2,7])
-NAFLD.T2D.upperCI[5]<- exp(summary_subc[2,8])
+NAFLD.T2D.MIps.HR.est[5] <-exp(summary_subc[2,2])
+NAFLD.T2D.MIps.logHR.est[5]<-summary_subc[2,2]
+NAFLD.T2D.MIps.se[5]<-summary_subc[2,3]
+NAFLD.T2D.MIps.pvalue[5]<-summary_subc[2,6]
+NAFLD.T2D.MIps.lowerCI[5]<- exp(summary_subc[2,7])
+NAFLD.T2D.MIps.upperCI[5]<- exp(summary_subc[2,8])
 
-NAFLD.T2D.HR.est[6] <-exp(summary_iptw[2,2])
-NAFLD.T2D.logHR.est[6]<-summary_iptw[2,2]
-NAFLD.T2D.se[6]<-summary_iptw[2,3]
-NAFLD.T2D.pvalue[6]<-summary_iptw[2,6]
-NAFLD.T2D.lowerCI[6]<- exp(summary_iptw[2,7])
-NAFLD.T2D.upperCI[6]<- exp(summary_iptw[2,8])
+NAFLD.T2D.MIps.HR.est[6] <-exp(summary_iptw[2,2])
+NAFLD.T2D.MIps.logHR.est[6]<-summary_iptw[2,2]
+NAFLD.T2D.MIps.se[6]<-summary_iptw[2,3]
+NAFLD.T2D.MIps.pvalue[6]<-summary_iptw[2,6]
+NAFLD.T2D.MIps.lowerCI[6]<- exp(summary_iptw[2,7])
+NAFLD.T2D.MIps.upperCI[6]<- exp(summary_iptw[2,8])
 ```
 
 ```{r}
 NAFLDoutcome.T2D.result <- 
   structure(list(
-    mean  = c(NA, NA, NAFLD.T2D.HR.est), 
-    lower = c(NA, NA, NAFLD.T2D.lowerCI),
-    upper = c(NA, NA, NAFLD.T2D.upperCI)),
+    mean  = c(NA, NA, NAFLD.T2D.MIps.HR.est), 
+    lower = c(NA, NA, NAFLD.T2D.MIps.lowerCI),
+    upper = c(NA, NA, NAFLD.T2D.MIps.upperCI)),
     .Names = c("mean", "lower", "upper"), 
     row.names = c(NA, -8L), 
     class = "data.frame")
 
 A <- cbind2(c("","Method","Greedy Matching","Optimal Matching","1:2 Matching","Full Matching","Subclassification", "IPTW"),
-               c("","Effect", as.character(round(NAFLD.T2D.HR.est,3))))
-B<- cbind2(c("","SE", as.character(round(NAFLD.T2D.se,3))),
-           c("","p-value", ifelse(NAFLD.T2D.pvalue<0.001, "<0.001", round(NAFLD.T2D.pvalue,3))))
+               c("","Effect", as.character(round(NAFLD.T2D.MIps.HR.est,3))))
+B<- cbind2(c("","SE", as.character(round(NAFLD.T2D.MIps.se,3))),
+           c("","p-value", ifelse(NAFLD.T2D.MIps.pvalue<0.001, "<0.001", round(NAFLD.T2D.MIps.pvalue,3))))
 tabletext <- cbind2(A ,B)
 
 forestplot(tabletext, 
