@@ -115,8 +115,8 @@ set.seed(1234)
 omitNAFLD$iptw<- ifelse(omitNAFLD$T2D == 1, (mean(omitNAFLD$param_ps))/omitNAFLD$param_ps, 
                         (mean(1-omitNAFLD$param_ps))/(1-omitNAFLD$param_ps))
 
-iptw <- dx.wts(omitNAFLD$iptw, data = as.data.frame(omitNAFLD), vars = newvariables.normal, treat.var="T2D", 
-               estimand = "ATE")
+iptw <- dx.wts(omitNAFLD$iptw, data = as.data.frame(omitNAFLD), treat.var="T2D", 
+               estimand = "ATT")
 
 # NAFLD_status~T2D
 formula1<-as.formula((paste("NAFLD_status","~ T2D+ ",paste(newvariables.normal,collapse = "+"))))
