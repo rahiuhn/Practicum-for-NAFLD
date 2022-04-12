@@ -41,7 +41,8 @@ perflistcreator = function(model_list = fitlist){
     # Create a data frame
     selfeat = data.frame(variable = rownames(df)[-1], importance=df[-1,1], stringsAsFactors = F)
     names(selfeat) = c("variable", "importance")
-    selfeat$importance=ifelse(selfeat$importance == 0, 0, 1)
+    selfeat$importance[is.na(selfeat$importance) | is.nan(selfeat$importance)] = 0
+    selfeat$importance[selfeat$importance != 0] = 1
     selfeat
   })
   # Combine the list of selected features into a single dataframe
@@ -175,7 +176,7 @@ res2 = lapply(1:boot_rep, function(seed) {
 
 freqdf2 = perflistcreator(model_list = res2)
 nboots2<-colSums(freqdf2, na.rm = T)
-totalboots2<-sapply(freqdf, function(x) length(x[!is.na(x)]))
+totalboots2<-sapply(freqdf2, function(x) length(x[!is.na(x)]))
 f2<- data.frame(t(rbind(nboots2,totalboots2)))
 ## Calculate frequency
 freq2= colSums(freqdf2, na.rm = T)/ sapply(freqdf2, function(x) length(x[!is.na(x)]))
@@ -184,8 +185,6 @@ freqdf2 = as.data.frame(t(freqdf2))
 freqdf2 = freqdf2 %>% mutate(freq=c(t(freq2)),feature=rownames(freqdf2))
 print(t(rbind(freqdf2$feature,freqdf2$freq)))
 print(freqdf2$feature[freqdf2$freq>0.7])
-
-
 
 
 
