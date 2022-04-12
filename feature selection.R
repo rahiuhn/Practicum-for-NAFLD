@@ -116,27 +116,18 @@ res = lapply(1:boot_rep, function(seed) {
 })
 
 freqdf = perflistcreator(model_list = res)
-
+nboots<-colSums(freqdf, na.rm = T)
+totalboots<-sapply(freqdf, function(x) length(x[!is.na(x)]))
+f1<- data.frame(t(rbind(nboots,totalboots)))
 ## Calculate frequency
 freq = colSums(freqdf, na.rm = T)/ sapply(freqdf, function(x) length(x[!is.na(x)]))
 freq =ifelse(is.na(freq),0,freq)
 freqdf = as.data.frame(t(freqdf))
 freqdf = freqdf %>% mutate(freq=c(t(freq)),feature=rownames(freqdf))
+print(t(rbind(freqdf$feature,freqdf$freq)))
 print(freqdf$feature[freqdf$freq>0.7])
 
-## Variables related to NAFLD_status: 
-variable.related.NAFLD<-c("BMIdich..25.Glycated_haemoglobin__HbA1c_","BMIdich..25.LDL","
-  BMIdich..25.Systolic_Blood_Pressure", "BMIdich..25.Triglycerides",                          
-"BMIdich..25.Waist_circumference", "Glycated_haemoglobin__HbA1c_.HDL_cholesterol",
-"Glycated_haemoglobin__HbA1c_.LDL", "Glycated_haemoglobin__HbA1c_.Sex1",                   
-"Glycated_haemoglobin__HbA1c_.Systolic_Blood_Pressure", "Glycated_haemoglobin__HbA1c_.Triglycerides" ,         
-"Glycated_haemoglobin__HbA1c_.Waist_circumference","HDL_cholesterol.LDL",                                
-"HDL_cholesterol.Sex1","HDL_cholesterol.Systolic_Blood_Pressure",             
-"HDL_cholesterol.Triglycerides","HDL_cholesterol.Waist_circumference",                 
-"LDL.Sex1","LDL.Systolic_Blood_Pressure" ,                        
-"LDL.Triglycerides","LDL.Waist_circumference","Sex1.Systolic_Blood_Pressure",
-"Sex1.Triglycerides","Sex1.Waist_circumference","Systolic_Blood_Pressure.Triglycerides",
-"Systolic_Blood_Pressure.Waist_circumference","Triglycerides.Waist_circumference")       
+
 
 boot_rep = 500 # Number of Boot straps
 numpred = 8 # Total number of predictors or independent variables used in the model.
@@ -144,7 +135,7 @@ numpred = 8 # Total number of predictors or independent variables used in the mo
 # PARALLEL RUN
 plan(multisession(workers = 8))
 
-res = lapply(1:boot_rep, function(seed) {
+res2 = lapply(1:boot_rep, function(seed) {
   # Generate Bootstrap rows
   set.seed(seed)
   bootrows = sample(1:nrow(omitNAFLD), nrow(omitNAFLD), replace = T)
@@ -182,52 +173,17 @@ res = lapply(1:boot_rep, function(seed) {
 
 ## Create a matrix of features for each model
 
-freqdf = perflistcreator(model_list = res)
+freqdf2 = perflistcreator(model_list = res2)
+nboots2<-colSums(freqdf2, na.rm = T)
+totalboots2<-sapply(freqdf, function(x) length(x[!is.na(x)]))
+f2<- data.frame(t(rbind(nboots2,totalboots2)))
 ## Calculate frequency
-freq = colSums(freqdf, na.rm = T)/ sapply(freqdf, function(x) length(x[!is.na(x)]))
-freq =ifelse(is.na(freq),0,freq)
-freqdf = as.data.frame(t(freqdf))
-freqdf = freqdf %>% mutate(freq=c(t(freq)),feature=rownames(freqdf))
-print(freqdf$feature[freqdf$freq>0.7])
-  
-variable.related.T2D<-c("BMIdich..25.Glycated_haemoglobin__HbA1c_","BMIdich..25.LDL",                                     
-"BMIdich..25.Systolic_Blood_Pressure" , "BMIdich..25.Triglycerides",                           
-"BMIdich..25.Waist_circumference" ,                     "Glycated_haemoglobin__HbA1c_.HDL_cholesterol",        
-"Glycated_haemoglobin__HbA1c_.LDL",                     "Glycated_haemoglobin__HbA1c_.Sex1",                   
-"Glycated_haemoglobin__HbA1c_.Systolic_Blood_Pressure", "Glycated_haemoglobin__HbA1c_.Triglycerides",          
-"Glycated_haemoglobin__HbA1c_.Waist_circumference",     "HDL_cholesterol.LDL" ,                                
-"HDL_cholesterol.Systolic_Blood_Pressure",              "HDL_cholesterol.Triglycerides" ,                      
- "LDL.Sex1",                                             "LDL.Systolic_Blood_Pressure",                         
-"LDL.Triglycerides",                                    "LDL.Waist_circumference",                             
-"Sex1.Systolic_Blood_Pressure", "Sex1.Waist_circumference",                            
-"Systolic_Blood_Pressure.Triglycerides","Systolic_Blood_Pressure.Waist_circumference" ,        
-"Triglycerides.Waist_circumference" )         
-
-
-
-newvariables.bootstrap.sampling.interaction<-c("BMIdich..25.Glycated_haemoglobin__HbA1c_", 
-                                               "BMIdich..25.LDL","BMIdich..25.Triglycerides",
-                                               "BMIdich..25.Waist_circumference", 
-                                               "Glycated_haemoglobin__HbA1c_.HDL_cholesterol", 
-                                               "Glycated_haemoglobin__HbA1c_.LDL",
-                                               "Glycated_haemoglobin__HbA1c_.Sex1", 
-                                               "Glycated_haemoglobin__HbA1c_.Systolic_Blood_Pressure",
-                                               "Glycated_haemoglobin__HbA1c_.Triglycerides",  
-                                               "Glycated_haemoglobin__HbA1c_.Waist_circumference", 
-                                               "HDL_cholesterol.LDL","HDL_cholesterol.Systolic_Blood_Pressure",
-                                               "HDL_cholesterol.Triglycerides","LDL.Sex1",
-                                               "LDL.Systolic_Blood_Pressure", "LDL.Triglycerides", 
-                                               "LDL.Waist_circumference","Sex1.Systolic_Blood_Pressure",
-                                               "Sex1.Waist_circumference","Systolic_Blood_Pressure.Triglycerides",
-                                               "Systolic_Blood_Pressure.Waist_circumference",
-                                               "Triglycerides.Waist_circumference")
-
-
-
-
-
-
-
+freq2= colSums(freqdf2, na.rm = T)/ sapply(freqdf2, function(x) length(x[!is.na(x)]))
+freq2 =ifelse(is.na(freq2),0,freq2)
+freqdf2 = as.data.frame(t(freqdf2))
+freqdf2 = freqdf2 %>% mutate(freq=c(t(freq2)),feature=rownames(freqdf2))
+print(t(rbind(freqdf2$feature,freqdf2$freq)))
+print(freqdf2$feature[freqdf2$freq>0.7])
 
 
 
